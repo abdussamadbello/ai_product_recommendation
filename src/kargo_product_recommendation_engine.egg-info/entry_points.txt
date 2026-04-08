@@ -1,0 +1,2 @@
+[console_scripts]
+kargo-reco = kargo_reco.main:main

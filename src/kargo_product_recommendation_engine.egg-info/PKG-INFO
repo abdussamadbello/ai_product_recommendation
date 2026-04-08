@@ -1,0 +1,53 @@
+Metadata-Version: 2.4
+Name: kargo-product-recommendation-engine
+Version: 0.1.0
+Summary: Hybrid deterministic and AI-assisted product recommendation engine for Kargo.
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: gradio<6.0.0,>=5.0.0
+Requires-Dist: langgraph<1.0.0,>=0.2.0
+Requires-Dist: openai<2.0.0,>=1.40.0
+Requires-Dist: pandas<3.0.0,>=2.2.0
+Requires-Dist: pydantic<3.0.0,>=2.8.0
+Provides-Extra: dev
+Requires-Dist: pytest<9.0.0,>=8.0.0; extra == "dev"
+
+# Kargo Product Recommendation Engine
+
+V1 prototype for deterministic benchmark-driven recommendation with AI-assisted explanation, trace artifacts, and a Gradio UI.
+
+## Requirements
+
+- Python 3.12+
+- `uv`
+- Optional: `OPENAI_API_KEY` for live explanation generation
+
+## Install
+
+```bash
+uv sync --extra dev
+```
+
+## Run
+
+```bash
+uv run kargo-reco
+```
+
+The app uses `data/product_benchmarks.csv` by default. Override it with:
+
+```bash
+BENCHMARK_CSV_PATH=/path/to/file.csv uv run kargo-reco
+```
+
+## Test
+
+```bash
+uv run pytest
+```
+
+## Notes
+
+- Recommendation selection is deterministic.
+- AI is used only to generate the summary and falls back to a template if no model is configured or the call fails.
+- Per-request trace artifacts are written under `traces/`.

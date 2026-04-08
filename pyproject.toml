@@ -1,0 +1,35 @@
+[project]
+name = "kargo-product-recommendation-engine"
+version = "0.1.0"
+description = "Hybrid deterministic and AI-assisted product recommendation engine for Kargo."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "gradio>=5.0.0,<6.0.0",
+  "langgraph>=0.2.0,<1.0.0",
+  "openai>=1.40.0,<2.0.0",
+  "pandas>=2.2.0,<3.0.0",
+  "pydantic>=2.8.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0,<9.0.0",
+]
+
+[project.scripts]
+kargo-reco = "kargo_reco.main:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,7 @@
+[
+  {"client_name": "Acme Shoes", "kpi": "CLICK_THROUGH_RATE", "client_vertical": "Retail", "budget": 25000},
+  {"client_name": "Stellar Bank", "kpi": "IN_VIEW_RATE", "client_vertical": "Finance", "budget": 80000},
+  {"client_name": "Wanderlust Air", "kpi": "CLICK_THROUGH_RATE", "client_vertical": "Travel", "budget": 60000},
+  {"client_name": "Burger Bazaar", "kpi": "CLICK_THROUGH_RATE", "client_vertical": "QSR", "budget": 15000},
+  {"client_name": "CineVerse", "kpi": "IN_VIEW_RATE", "client_vertical": "Entertainment", "budget": 40000}
+]
