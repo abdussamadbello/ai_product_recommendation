@@ -39,6 +39,6 @@ def workflow_runner(tmp_path: Path, benchmark_csv: Path) -> WorkflowRunner:
     trace_manager = TraceManager(traces_dir, get_logger(logs_dir))
     repository = BenchmarkRepository(benchmark_csv)
     summary_generator = SummaryGenerator(
-        api_key=None, model="gpt-test", prompt_version="test", timeout_s=1
+        api_key=None, base_url=None, model="gpt-test", prompt_version="test", timeout_s=1
     )
     return WorkflowRunner(repository, summary_generator, trace_manager, uploads_dir)

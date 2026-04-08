@@ -1,23 +1,73 @@
 from __future__ import annotations
 
-import importlib
 import json
 import time
 from dataclasses import dataclass
 from typing import Any
 
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field, field_validator
+
 from kargo_reco.reasoning import build_fallback_summary
 from kargo_reco.schemas import LLMTrace, SummaryBlock
 
 
-SYSTEM_PROMPT = """You summarize a deterministic recommendation result.
-Return strict JSON with keys: short_text, structured_reasoning, alternative_notes.
-Do not invent products, metrics, or constraints. Keep the explanation concise."""
+class LLMSummaryPayload(BaseModel):
+    short_text: str
+    structured_reasoning: list[str]
+    alternative_notes: list[str] | None = None
+
+    @field_validator("structured_reasoning", "alternative_notes", mode="before")
+    @classmethod
+    def normalize_string_list(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return value
+
+        normalized_items: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                normalized_items.append(item)
+                continue
+            if isinstance(item, dict):
+                creative_name = item.get("creative_name")
+                reason = item.get("reason")
+                if isinstance(creative_name, str) and isinstance(reason, str):
+                    normalized_items.append(f"{creative_name}: {reason}")
+                    continue
+                if isinstance(item.get("note"), str):
+                    normalized_items.append(item["note"])
+                    continue
+                if isinstance(item.get("reason"), str):
+                    normalized_items.append(item["reason"])
+                    continue
+                normalized_items.append(json.dumps(item, sort_keys=True))
+                continue
+            normalized_items.append(str(item))
+        return normalized_items
+
+
+PROMPT_TEMPLATE = """You summarize a deterministic recommendation result.
+Use only the facts provided.
+Do not invent products, metrics, or constraints.
+Mention the selected product by name when the decision status is success.
+If the decision status is no_match, clearly say that no eligible product was found.
+Each item in structured_reasoning and alternative_notes must be a plain string.
+
+{format_instructions}
+
+Facts:
+{facts_json}
+"""
 
 
 @dataclass
 class SummaryGenerator:
     api_key: str | None
+    base_url: str | None
     model: str
     prompt_version: str
     timeout_s: float = 20.0
@@ -43,43 +93,42 @@ class SummaryGenerator:
         return summary, trace
 
     def generate(self, facts: dict[str, Any]) -> tuple[SummaryBlock, LLMTrace]:
-        if not self.api_key:
-            return self._fallback(facts, error="OPENAI_API_KEY not configured")
-
-        try:
-            openai_module = importlib.import_module("openai")
-        except ImportError:
-            return self._fallback(facts, error="openai package not installed")
-
-        try:
-            client = openai_module.OpenAI(api_key=self.api_key, timeout=self.timeout_s)
-            started = time.perf_counter()
-            response = client.responses.create(
-                model=self.model,
-                input=[
-                    {
-                        "role": "system",
-                        "content": [{"type": "input_text", "text": SYSTEM_PROMPT}],
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": json.dumps(facts, indent=2, sort_keys=True),
-                            }
-                        ],
-                    },
-                ],
+        effective_api_key = self.api_key or ("ollama" if self.base_url else None)
+        if not effective_api_key:
+            return self._fallback(
+                facts,
+                error="Neither OPENAI_API_KEY nor OPENAI_BASE_URL is configured",
             )
+
+        try:
+            parser = PydanticOutputParser(pydantic_object=LLMSummaryPayload)
+            prompt = PromptTemplate(
+                template=PROMPT_TEMPLATE,
+                input_variables=["facts_json"],
+                partial_variables={
+                    "format_instructions": parser.get_format_instructions()
+                },
+            )
+            llm = ChatOpenAI(
+                model=self.model,
+                api_key=effective_api_key,
+                base_url=self.base_url,
+                temperature=0,
+                timeout=self.timeout_s,
+            )
+            prompt_value = prompt.invoke(
+                {"facts_json": json.dumps(facts, indent=2, sort_keys=True)}
+            )
+            started = time.perf_counter()
+            message = llm.invoke(prompt_value)
             latency_ms = int((time.perf_counter() - started) * 1000)
-            output_text = getattr(response, "output_text", "") or ""
-            parsed = json.loads(output_text)
+            output_text = self._coerce_message_text(getattr(message, "content", ""))
+            parsed = parser.parse(output_text)
             self._validate_parsed_output(parsed, facts)
             summary = SummaryBlock(
-                short_text=parsed["short_text"],
-                structured_reasoning=list(parsed["structured_reasoning"]),
-                alternative_notes=parsed.get("alternative_notes"),
+                short_text=parsed.short_text,
+                structured_reasoning=list(parsed.structured_reasoning),
+                alternative_notes=parsed.alternative_notes,
                 summary_source="llm",
             )
             trace = LLMTrace(
@@ -97,17 +146,22 @@ class SummaryGenerator:
             return self._fallback(facts, error=str(exc))
 
     @staticmethod
-    def _validate_parsed_output(parsed: dict[str, Any], facts: dict[str, Any]) -> None:
-        if not isinstance(parsed.get("short_text"), str):
-            raise ValueError("short_text must be a string")
-        if not isinstance(parsed.get("structured_reasoning"), list):
-            raise ValueError("structured_reasoning must be a list")
-        if parsed.get("alternative_notes") is not None and not isinstance(
-            parsed.get("alternative_notes"), list
-        ):
-            raise ValueError("alternative_notes must be a list or null")
+    def _coerce_message_text(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            chunks: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    chunks.append(item)
+                elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                    chunks.append(item["text"])
+            return "\n".join(chunks)
+        return str(content)
 
-        short_text = parsed["short_text"].lower()
+    @staticmethod
+    def _validate_parsed_output(parsed: LLMSummaryPayload, facts: dict[str, Any]) -> None:
+        short_text = parsed.short_text.lower()
         if facts["decision_status"] == "success":
             selected_name = str(facts["selected_product"]["creative_name"]).lower()
             if selected_name not in short_text:

@@ -20,6 +20,16 @@ uv sync --extra dev
 uv run kargo-reco
 ```
 
+## Dev Reload
+
+For local development with auto-reload on file changes:
+
+```bash
+uv run gradio app.py
+```
+
+This uses Gradio's reload mode and watches the app for source changes.
+
 The app uses `data/product_benchmarks.csv` by default. Override it with:
 
 ```bash
@@ -37,3 +47,18 @@ uv run pytest
 - Recommendation selection is deterministic.
 - AI is used only to generate the summary and falls back to a template if no model is configured or the call fails.
 - Per-request trace artifacts are written under `traces/`.
+
+## Local LLMs
+
+The summary step can also target an OpenAI-compatible local endpoint such as Ollama.
+
+Example configuration:
+
+```bash
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=llama3.2
+OPENAI_API_KEY=
+uv run kargo-reco
+```
+
+When `OPENAI_BASE_URL` is set, the app will use that endpoint and does not require a real OpenAI API key.

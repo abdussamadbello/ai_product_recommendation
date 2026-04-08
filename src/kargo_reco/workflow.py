@@ -284,6 +284,7 @@ def get_default_runner() -> WorkflowRunner:
     repository = BenchmarkRepository(settings.benchmark_csv_path)
     summary_generator = SummaryGenerator(
         api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
         model=settings.openai_model,
         prompt_version=settings.prompt_version,
         timeout_s=settings.openai_timeout_s,

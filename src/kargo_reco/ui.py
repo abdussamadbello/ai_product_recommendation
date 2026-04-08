@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,35 +13,209 @@ from kargo_reco.schemas import RecommendationResponse
 from kargo_reco.workflow import WorkflowRunner, get_default_runner
 
 
+APP_CSS = """
+.result-card, .summary-card {
+  background: rgba(255, 255, 255, 0.90);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+}
+.result-card, .summary-card {
+  padding: 22px 24px;
+}
+.eyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0369a1;
+  margin-bottom: 8px;
+}
+.result-title {
+  margin: 0 0 12px;
+  font-size: 1.9rem;
+  line-height: 1.1;
+}
+.status-chip {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #dcfce7;
+  color: #166534;
+}
+.status-chip.no-match {
+  background: #fef3c7;
+  color: #92400e;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.metric {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+.metric-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.metric-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+.summary-card h3 {
+  margin: 0 0 10px;
+  font-size: 1.1rem;
+}
+.summary-card p {
+  margin: 0 0 16px;
+  line-height: 1.55;
+}
+.summary-card ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.summary-card li {
+  margin: 0 0 8px;
+}
+"""
+
+
+def _format_currency(value: float | int | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"${float(value):,.0f}"
+
+
+def _format_rate(value: float | int | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"{float(value) * 100:.0f}%"
+
+
+def _humanize_token(text: str) -> str:
+    normalized = text.replace("_", " ").strip()
+    replacements = {
+        "click through rate": "Click-through rate",
+        "in view rate": "In-view rate",
+        "budget shortfall": "Budget shortfall",
+        "vertical mismatch": "Vertical mismatch",
+    }
+    lowered = normalized.lower()
+    if lowered in replacements:
+        return replacements[lowered]
+    return normalized[:1].upper() + normalized[1:]
+
+
+def _clean_sentence(text: str) -> str:
+    sentence = re.sub(r"\bminimum_budget\b", "minimum budget", text)
+    sentence = re.sub(r"\bclick_through_rate\b", "click-through rate", sentence)
+    sentence = re.sub(r"\bin_view_rate\b", "in-view rate", sentence)
+    sentence = re.sub(r"\bpre_filter_count\b", "pre-filter count", sentence)
+    sentence = re.sub(r"\bpost_vertical_count\b", "post-vertical count", sentence)
+    sentence = re.sub(r"\bpost_budget_count\b", "post-budget count", sentence)
+    sentence = sentence.replace("  ", " ").strip()
+    return sentence[:1].upper() + sentence[1:] if sentence else sentence
+
+
+def _render_list(items: list[str] | None) -> str:
+    if not items:
+        return ""
+    rendered = "".join(f"<li>{_clean_sentence(item)}</li>" for item in items)
+    return f"<ul>{rendered}</ul>"
+
+
 def _render_recommendation_card(response: RecommendationResponse) -> str:
     if response.meta.status == "success":
         item = response.recommendations[0]
-        return (
-            f"### {item.creative_name}\n"
-            f"- Vertical: {item.vertical}\n"
-            f"- Minimum budget: {item.minimum_budget:,.0f}\n"
-            f"- Click-through rate: {item.click_through_rate:.2f}\n"
-            f"- In-view rate: {item.in_view_rate:.2f}\n"
-        )
+        return f"""
+<div class="result-card">
+  <div class="eyebrow">Recommended Product</div>
+  <div class="status-chip">Eligible and selected</div>
+  <h2 class="result-title">{item.creative_name}</h2>
+  <div class="metric-grid">
+    <div class="metric">
+      <span class="metric-label">Vertical</span>
+      <span class="metric-value">{item.vertical}</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Minimum budget</span>
+      <span class="metric-value">{_format_currency(item.minimum_budget)}</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Click-through rate</span>
+      <span class="metric-value">{_format_rate(item.click_through_rate)}</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">In-view rate</span>
+      <span class="metric-value">{_format_rate(item.in_view_rate)}</span>
+    </div>
+  </div>
+</div>
+"""
     if response.nearest_alternative:
         alt = response.nearest_alternative
-        return (
-            "### No Eligible Match\n"
-            f"- Closest alternative: {alt.creative_name}\n"
-            f"- Block reason: {alt.block_reason}\n"
-            f"- Minimum budget: {alt.minimum_budget:,.0f}\n"
-            f"- Budget shortfall: {(alt.budget_shortfall or 0):,.0f}\n"
-        )
-    return "### No Eligible Match\n- No alternative was available."
+        return f"""
+<div class="result-card">
+  <div class="eyebrow">Recommendation Status</div>
+  <div class="status-chip no-match">No eligible match</div>
+  <h2 class="result-title">{alt.creative_name}</h2>
+  <p>This was the closest alternative, but it could not be selected.</p>
+  <div class="metric-grid">
+    <div class="metric">
+      <span class="metric-label">Vertical</span>
+      <span class="metric-value">{alt.vertical}</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Block reason</span>
+      <span class="metric-value">{_humanize_token(alt.block_reason)}</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Minimum budget</span>
+      <span class="metric-value">{_format_currency(alt.minimum_budget)}</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Budget shortfall</span>
+      <span class="metric-value">{_format_currency(alt.budget_shortfall or 0)}</span>
+    </div>
+  </div>
+</div>
+"""
+    return """
+<div class="result-card">
+  <div class="eyebrow">Recommendation Status</div>
+  <div class="status-chip no-match">No eligible match</div>
+  <h2 class="result-title">No alternative available</h2>
+  <p>The benchmark data did not contain a usable fallback product for this request.</p>
+</div>
+"""
 
 
 def _render_summary(response: RecommendationResponse) -> str:
-    lines = [response.summary.short_text, ""]
-    lines.extend(f"- {item}" for item in response.summary.structured_reasoning)
-    if response.summary.alternative_notes:
-        lines.append("")
-        lines.extend(f"- {item}" for item in response.summary.alternative_notes)
-    return "\n".join(lines)
+    reasoning = _render_list(response.summary.structured_reasoning)
+    alternatives = _render_list(response.summary.alternative_notes)
+    alternatives_section = ""
+    if alternatives:
+        alternatives_section = f"<h3>Other considerations</h3>{alternatives}"
+    return f"""
+<div class="summary-card">
+  <div class="eyebrow">Recommendation Summary</div>
+  <p>{_clean_sentence(response.summary.short_text)}</p>
+  <h3>Why this result</h3>
+  {reasoning}
+  {alternatives_section}
+</div>
+"""
 
 
 def _trace_summary(response: RecommendationResponse) -> dict[str, Any]:
@@ -178,6 +353,7 @@ def build_app(runner: WorkflowRunner | None = None) -> gr.Blocks:
     )
 
     with gr.Blocks(title="Kargo Product Recommendation Engine") as app:
+        app.css = APP_CSS
         gr.Markdown("# Kargo Product Recommendation Engine")
         with gr.Row():
             with gr.Column(scale=1):
@@ -189,6 +365,16 @@ def build_app(runner: WorkflowRunner | None = None) -> gr.Blocks:
                     allow_custom_value=False,
                     info="Load a sample request, then edit any field before submitting.",
                 )
+                with gr.Accordion("Benchmark Management", open=False, elem_classes=["compact-section"]):
+                    benchmark_upload = gr.File(
+                        label="Upload Benchmark CSV",
+                        file_types=[".csv"],
+                        type="filepath",
+                    )
+                    with gr.Row():
+                        reload_button = gr.Button("Reload", variant="secondary")
+                        upload_button = gr.Button("Use Upload", variant="secondary")
+                    reload_status = gr.JSON(label="Benchmark Status")
                 with gr.Tab("Form Input"):
                     client_name = gr.Textbox(
                         label="Client Name", value=default_preview["client_name"]
@@ -219,20 +405,6 @@ def build_app(runner: WorkflowRunner | None = None) -> gr.Blocks:
                 summary_block = gr.Markdown(label="Summary")
                 response_json = gr.JSON(label="Response JSON")
                 trace_download = gr.File(label="Download Trace JSON")
-
-        with gr.Accordion("Benchmark Management", open=False):
-            gr.Markdown(
-                "Upload your own benchmark CSV or reload the current active benchmark dataset."
-            )
-            with gr.Row():
-                reload_button = gr.Button("Reload Benchmarks", variant="secondary")
-                upload_button = gr.Button("Use Uploaded Benchmarks", variant="secondary")
-            benchmark_upload = gr.File(
-                label="Upload Benchmark CSV",
-                file_types=[".csv"],
-                type="filepath",
-            )
-            reload_status = gr.JSON(label="Benchmark Status")
 
         with gr.Accordion("Expanded Debug Panel", open=False):
             trace_json = gr.JSON(label="Trace Artifact")
