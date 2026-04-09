@@ -42,16 +42,20 @@ def build_tools(df: pd.DataFrame, vertical: str) -> list[StructuredTool]:
             products = tool_fns.filter_by_vertical(df, vertical=vertical)
         return tool_fns.filter_by_budget(budget=budget, products=products)
 
-    def _sort_by_kpi(kpi: str, products: list[dict[str, Any]] | None = None, limit: int = 5) -> list[dict[str, Any]]:
-        """Sort products by a KPI (click_through_rate or in_view_rate) descending. Returns top N. If products is omitted, automatically uses all products in the client's vertical."""
+    def _sort_by_kpi(kpi: str, budget: float | None = None, products: list[dict[str, Any]] | None = None, limit: int = 5) -> list[dict[str, Any]]:
+        """Sort products by a KPI (click_through_rate or in_view_rate) descending. Returns top N. Pass budget to automatically exclude products over budget. If products is omitted, uses all products in the client's vertical."""
         if not products:
             products = tool_fns.filter_by_vertical(df, vertical=vertical)
+        if budget is not None:
+            products = tool_fns.filter_by_budget(budget=budget, products=products)
         return tool_fns.sort_by_kpi(kpi=kpi, products=products, limit=limit)
 
-    def _score_products(weights: dict[str, float], products: list[dict[str, Any]] | None = None, limit: int = 5) -> list[dict[str, Any]]:
-        """Score and rank products using your own weighted formula. Set weights for click_through_rate and/or in_view_rate. Example: {"click_through_rate": 0.8, "in_view_rate": 0.2}. If products is omitted, automatically uses all products in the client's vertical."""
+    def _score_products(weights: dict[str, float], budget: float | None = None, products: list[dict[str, Any]] | None = None, limit: int = 5) -> list[dict[str, Any]]:
+        """Score and rank products using your own weighted formula. Set weights for click_through_rate and/or in_view_rate. Example: {"click_through_rate": 0.8, "in_view_rate": 0.2}. Pass budget to automatically exclude products over budget. If products is omitted, uses all products in the client's vertical."""
         if not products:
             products = tool_fns.filter_by_vertical(df, vertical=vertical)
+        if budget is not None:
+            products = tool_fns.filter_by_budget(budget=budget, products=products)
         return tool_fns.score_products(products=products, weights=weights, limit=limit)
 
     def _get_product_details(product_name: str, vertical: str) -> dict[str, Any] | None:

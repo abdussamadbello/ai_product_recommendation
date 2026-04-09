@@ -133,12 +133,85 @@ def _render_recommendation_cards(response: RecommendationResponse) -> str:
     return "\n".join(cards) + budget_bar
 
 
+def _format_summary_html(text: str) -> str:
+    """Convert the agent's free-form summary into structured HTML paragraphs."""
+    import re
+    # Split on common section markers the LLM produces
+    section_pattern = re.compile(
+        r"(?:^|\n)\s*"
+        r"(?:Summary recommendation:|Rationale:|Strategy and weighting:|"
+        r"Trade-offs considered:|Budget utilization:|Recommendations & next steps:|"
+        r"Reasoning:|Selection:)"
+    )
+    # Also split on "- " at the start of a line (bullet points)
+    parts = section_pattern.split(text)
+    # Find the section headers to re-insert them as bold labels
+    headers = section_pattern.findall(text)
+
+    if len(headers) == 0:
+        # No recognized sections — split on ". - " or "\n- " for bullet lists
+        text = re.sub(r"\.\s*-\s+", ".\n- ", text)
+        lines = text.split("\n")
+        html_parts = []
+        bullet_buffer: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                bullet_buffer.append(f"<li>{stripped[2:]}</li>")
+            else:
+                if bullet_buffer:
+                    html_parts.append(f"<ul>{''.join(bullet_buffer)}</ul>")
+                    bullet_buffer = []
+                if stripped:
+                    html_parts.append(f"<p>{stripped}</p>")
+        if bullet_buffer:
+            html_parts.append(f"<ul>{''.join(bullet_buffer)}</ul>")
+        return "\n".join(html_parts) if html_parts else f"<p>{text}</p>"
+
+    # Rebuild with headers as bold labels
+    html_parts = []
+    if parts[0].strip():
+        html_parts.append(f"<p>{parts[0].strip()}</p>")
+    for header, body in zip(headers, parts[1:]):
+        header_clean = header.strip().rstrip(":")
+        body_clean = body.strip()
+        if not body_clean:
+            continue
+        # Handle bullet points within body
+        body_clean = re.sub(r"\.\s*-\s+", ".\n- ", body_clean)
+        lines = body_clean.split("\n")
+        section_html = f"<h4 style='margin: 12px 0 4px; font-size: 0.95rem;'>{header_clean}</h4>"
+        p_buffer = []
+        bullet_buffer_inner: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                if p_buffer:
+                    section_html += f"<p>{''.join(p_buffer)}</p>"
+                    p_buffer = []
+                bullet_buffer_inner.append(f"<li>{stripped[2:]}</li>")
+            else:
+                if bullet_buffer_inner:
+                    section_html += f"<ul>{''.join(bullet_buffer_inner)}</ul>"
+                    bullet_buffer_inner = []
+                if stripped:
+                    p_buffer.append(stripped + " ")
+        if p_buffer:
+            section_html += f"<p>{''.join(p_buffer).strip()}</p>"
+        if bullet_buffer_inner:
+            section_html += f"<ul>{''.join(bullet_buffer_inner)}</ul>"
+        html_parts.append(section_html)
+
+    return "\n".join(html_parts)
+
+
 def _render_summary(response: RecommendationResponse) -> str:
+    formatted = _format_summary_html(response.summary)
     return f"""
 <div class="summary-card">
   <div class="eyebrow">Agent Summary</div>
-  <p>{response.summary}</p>
-  <p style="font-size: 0.8rem; color: #64748b;">Source: {response.meta.source} | Model: {response.meta.model} | Steps: {response.meta.agent_steps}</p>
+  {formatted}
+  <p style="font-size: 0.8rem; color: #64748b; margin-top: 12px;">Source: {response.meta.source} | Model: {response.meta.model} | Steps: {response.meta.agent_steps}</p>
 </div>"""
 
 
