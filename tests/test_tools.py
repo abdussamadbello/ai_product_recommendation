@@ -8,6 +8,7 @@ from kargo_reco.tools import (
     filter_by_budget,
     filter_by_vertical,
     finalize_recommendation,
+    get_eligible_products,
     get_product_details,
     score_products,
     sort_by_kpi,
@@ -62,6 +63,20 @@ def test_filter_by_budget_includes_exact_match() -> None:
 def test_filter_by_budget_empty_input() -> None:
     result = filter_by_budget(budget=50000.0, products=[])
     assert result == []
+
+
+def test_get_eligible_products_filters_vertical_and_budget(sample_df: pd.DataFrame) -> None:
+    result = get_eligible_products(sample_df, vertical="Retail", budget=25000.0)
+    assert result["total_in_vertical"] == 3
+    assert result["within_budget"] == 2  # Alpha (20k) and Beta (18k), not Gamma (30k)
+    assert all(p["minimum_budget"] <= 25000 for p in result["products"])
+
+
+def test_get_eligible_products_unknown_vertical(sample_df: pd.DataFrame) -> None:
+    result = get_eligible_products(sample_df, vertical="Travel", budget=100000.0)
+    assert result["total_in_vertical"] == 0
+    assert result["within_budget"] == 0
+    assert result["products"] == []
 
 
 def test_sort_by_kpi_returns_top_n_descending() -> None:

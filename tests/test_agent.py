@@ -18,14 +18,12 @@ def sample_df() -> pd.DataFrame:
     )
 
 
-def test_build_tools_returns_seven_tools(sample_df: pd.DataFrame) -> None:
+def test_build_tools_returns_five_tools(sample_df: pd.DataFrame) -> None:
     tools = build_tools(sample_df, vertical="Retail")
-    assert len(tools) == 7
+    assert len(tools) == 5
     tool_names = {t.name for t in tools}
     assert tool_names == {
-        "filter_by_vertical",
-        "filter_by_budget",
-        "sort_by_kpi",
+        "get_eligible_products",
         "score_products",
         "get_product_details",
         "check_budget_remaining",

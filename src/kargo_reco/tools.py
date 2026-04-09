@@ -17,6 +17,17 @@ def filter_by_budget(*, budget: float, products: list[dict[str, Any]]) -> list[d
     return [p for p in products if p["minimum_budget"] <= budget]
 
 
+def get_eligible_products(df: pd.DataFrame, *, vertical: str, budget: float) -> dict[str, Any]:
+    """Return all products matching the vertical AND within budget, in one call."""
+    all_in_vertical = filter_by_vertical(df, vertical=vertical)
+    affordable = filter_by_budget(budget=budget, products=all_in_vertical)
+    return {
+        "total_in_vertical": len(all_in_vertical),
+        "within_budget": len(affordable),
+        "products": affordable,
+    }
+
+
 def sort_by_kpi(*, kpi: str, products: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
     """Sort products by the given KPI descending and return top N."""
     sorted_products = sorted(products, key=lambda p: p.get(kpi, 0), reverse=True)
