@@ -36,16 +36,22 @@ def build_tools(df: pd.DataFrame, vertical: str) -> list[StructuredTool]:
         """Find all products available in a given vertical."""
         return tool_fns.filter_by_vertical(df, vertical=vertical)
 
-    def _filter_by_budget(budget: float, products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Filter a list of products to only those within the given budget."""
+    def _filter_by_budget(budget: float, products: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        """Filter products to only those within the given budget. If products is omitted, automatically uses all products in the client's vertical."""
+        if not products:
+            products = tool_fns.filter_by_vertical(df, vertical=vertical)
         return tool_fns.filter_by_budget(budget=budget, products=products)
 
-    def _sort_by_kpi(kpi: str, products: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
-        """Sort products by a KPI (click_through_rate or in_view_rate) descending. Returns top N."""
+    def _sort_by_kpi(kpi: str, products: list[dict[str, Any]] | None = None, limit: int = 5) -> list[dict[str, Any]]:
+        """Sort products by a KPI (click_through_rate or in_view_rate) descending. Returns top N. If products is omitted, automatically uses all products in the client's vertical."""
+        if not products:
+            products = tool_fns.filter_by_vertical(df, vertical=vertical)
         return tool_fns.sort_by_kpi(kpi=kpi, products=products, limit=limit)
 
-    def _score_products(products: list[dict[str, Any]], weights: dict[str, float], limit: int = 5) -> list[dict[str, Any]]:
-        """Score and rank products using your own weighted formula. Set weights for click_through_rate and/or in_view_rate to reflect the client's priorities. Example: {"click_through_rate": 0.8, "in_view_rate": 0.2}."""
+    def _score_products(weights: dict[str, float], products: list[dict[str, Any]] | None = None, limit: int = 5) -> list[dict[str, Any]]:
+        """Score and rank products using your own weighted formula. Set weights for click_through_rate and/or in_view_rate. Example: {"click_through_rate": 0.8, "in_view_rate": 0.2}. If products is omitted, automatically uses all products in the client's vertical."""
+        if not products:
+            products = tool_fns.filter_by_vertical(df, vertical=vertical)
         return tool_fns.score_products(products=products, weights=weights, limit=limit)
 
     def _get_product_details(product_name: str, vertical: str) -> dict[str, Any] | None:
