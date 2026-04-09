@@ -1,7 +1,7 @@
 Metadata-Version: 2.4
 Name: kargo-product-recommendation-engine
 Version: 0.1.0
-Summary: Hybrid deterministic and AI-assisted product recommendation engine for Kargo.
+Summary: Agentic AI product recommendation engine for Kargo.
 Requires-Python: >=3.12
 Description-Content-Type: text/markdown
 Requires-Dist: gradio<6.0.0,>=5.0.0
@@ -62,3 +62,18 @@ uv run pytest
 - Recommendation selection is deterministic.
 - AI is used only to generate the summary and falls back to a template if no model is configured or the call fails.
 - Per-request trace artifacts are written under `traces/`.
+
+## Local LLMs
+
+The summary step can also target an OpenAI-compatible local endpoint such as Ollama.
+
+Example configuration:
+
+```bash
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_MODEL=llama3.2
+OPENAI_API_KEY=
+uv run kargo-reco
+```
+
+When `OPENAI_BASE_URL` is set, the app will use that endpoint and does not require a real OpenAI API key.
