@@ -48,7 +48,7 @@ Create a `.env` file in the project root:
 **Option A: OpenAI API**
 ```bash
 OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4.1-mini
+OPENAI_MODEL=gpt-5.1-mini
 ```
 
 **Option B: Ollama (local LLM)**
@@ -129,7 +129,7 @@ All settings are configurable via environment variables:
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | — | OpenAI API key |
 | `OPENAI_BASE_URL` | — | Override for Ollama or compatible endpoint |
-| `OPENAI_MODEL` | `gpt-4.1-mini` | Model name |
+| `OPENAI_MODEL` | `gpt-5.1-mini` | Model name |
 | `OPENAI_TIMEOUT_S` | `30` | LLM request timeout (seconds) |
 | `BENCHMARK_CSV_PATH` | `data/product_benchmarks.csv` | Path to benchmark data |
 | `CLIENT_REQUESTS_PATH` | `data/client_requests.json` | Path to sample requests |

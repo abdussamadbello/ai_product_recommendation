@@ -234,7 +234,7 @@ Configurable via environment variables (existing pattern):
 
 - `OPENAI_API_KEY`: API key for OpenAI (or omit for Ollama)
 - `OPENAI_BASE_URL`: Override for Ollama or other OpenAI-compatible endpoints
-- `OPENAI_MODEL`: Model name (default: `gpt-4.1-mini`)
+- `OPENAI_MODEL`: Model name (default: `gpt-5.1-mini`)
 - `OPENAI_TIMEOUT_S`: Request timeout (default: 30s, increased from 20s for agent loops)
 
 When `OPENAI_BASE_URL` is set and no API key is provided, use `"ollama"` as the API key (existing pattern). Document in README the trade-offs of local models vs. cloud models for agent quality.

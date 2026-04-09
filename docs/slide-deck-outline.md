@@ -315,7 +315,7 @@ We started with 7 small tools and consolidated to 5 after seeing 9-step traces (
 |-------------|-----------|
 | **Latency** (~15s vs. ~1s) | Consolidated tools, could add caching |
 | **Non-deterministic** | Guardrail fallback ensures correct output |
-| **Cost** ($0.01-0.05 per request) | Use cheaper models (gpt-4.1-mini), limit steps |
+| **Cost** ($0.01-0.05 per request) | Use cheaper models (gpt-5.1-mini), limit steps |
 | **Hallucination risk** | Post-validation catches all constraint violations |
 | **Debugging complexity** | Full trace artifact with every tool call logged |
 
@@ -484,6 +484,6 @@ src/kargo_reco/
   ],
   "guardrail_violations": [],
   "step_latencies_ms": { "run_agent": 14523 },
-  "meta": { "status": "success", "source": "llm", "model": "gpt-4.1-mini" }
+  "meta": { "status": "success", "source": "llm", "model": "gpt-5.1-mini" }
 }
 ```

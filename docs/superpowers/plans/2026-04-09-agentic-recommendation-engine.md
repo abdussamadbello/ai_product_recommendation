@@ -146,7 +146,7 @@ def test_response_meta_accepts_all_status_values() -> None:
         meta = ResponseMeta(
             status=status,
             request_id="abc-123",
-            model="gpt-4.1-mini",
+            model="gpt-5.1-mini",
             total_tokens=None,
             agent_steps=3,
             latency_ms=500,
@@ -175,7 +175,7 @@ def test_recommendation_response_assembles_correctly() -> None:
         meta=ResponseMeta(
             status="success",
             request_id="abc-123",
-            model="gpt-4.1-mini",
+            model="gpt-5.1-mini",
             total_tokens=100,
             agent_steps=4,
             latency_ms=1200,
@@ -802,7 +802,7 @@ def test_system_prompt_mentions_strategy() -> None:
 
 def test_build_agent_returns_compiled_graph(sample_df: pd.DataFrame) -> None:
     agent = build_agent(
-        model_name="gpt-4.1-mini",
+        model_name="gpt-5.1-mini",
         api_key="test-key",
         base_url=None,
         timeout_s=10,
@@ -1412,7 +1412,7 @@ def workflow_runner(tmp_path: Path, benchmark_csv: Path) -> WorkflowRunner:
         repository=repository,
         trace_manager=trace_manager,
         uploads_dir=uploads_dir,
-        model_name="gpt-4.1-mini",
+        model_name="gpt-5.1-mini",
         api_key=None,
         base_url=None,
         timeout_s=10,
@@ -1886,7 +1886,7 @@ def _sample_response() -> RecommendationResponse:
             AgentStep(step_number=2, tool_name="finalize_recommendation", tool_input={"products": ["Alpha"]}, tool_output={}, agent_reasoning=None, latency_ms=30),
         ],
         meta=ResponseMeta(
-            status="success", request_id="abc-123", model="gpt-4.1-mini",
+            status="success", request_id="abc-123", model="gpt-5.1-mini",
             total_tokens=100, agent_steps=2, latency_ms=500, source="llm",
         ),
     )
