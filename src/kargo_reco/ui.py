@@ -138,69 +138,59 @@ def _format_summary_html(text: str) -> str:
     import re
     # Split on common section markers the LLM produces
     section_pattern = re.compile(
-        r"(?:^|\n)\s*"
-        r"(?:Summary recommendation:|Rationale:|Strategy and weighting:|"
-        r"Trade-offs considered:|Budget utilization:|Recommendations & next steps:|"
-        r"Reasoning:|Selection:)"
+        r"(?:^|\.\s*)"
+        r"(Summary recommendation:|Rationale:|Strategy and weighting:|Strategy:|"
+        r"Trade-offs considered:|Trade-offs:|Budget utilization:|Budget:|"
+        r"Recommendations & next steps:|Reasoning:|Selection:|"
+        r"Objective:|Approach:|Selected products?(?:\s*\([^)]*\))?:|"
+        r"Selected product\(s\):|Why this product:|Alternatives considered:)"
     )
-    # Also split on "- " at the start of a line (bullet points)
     parts = section_pattern.split(text)
-    # Find the section headers to re-insert them as bold labels
-    headers = section_pattern.findall(text)
+    # section_pattern.split with groups returns [pre, header1, body1, header2, body2, ...]
+    headers = parts[1::2]
+    bodies = parts[2::2]
+    pre = parts[0].strip() if parts else ""
 
-    if len(headers) == 0:
-        # No recognized sections — split on ". - " or "\n- " for bullet lists
-        text = re.sub(r"\.\s*-\s+", ".\n- ", text)
-        lines = text.split("\n")
-        html_parts = []
-        bullet_buffer: list[str] = []
+    def _body_to_html(body: str) -> str:
+        """Convert a section body into paragraphs and bullet lists."""
+        body = re.sub(r"\.\s*-\s+", ".\n- ", body)
+        lines = body.split("\n")
+        html = ""
+        p_buf: list[str] = []
+        li_buf: list[str] = []
         for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("- "):
-                bullet_buffer.append(f"<li>{stripped[2:]}</li>")
+            s = line.strip()
+            if s.startswith("- "):
+                if p_buf:
+                    html += f"<p>{''.join(p_buf).strip()}</p>"
+                    p_buf = []
+                li_buf.append(f"<li>{s[2:]}</li>")
             else:
-                if bullet_buffer:
-                    html_parts.append(f"<ul>{''.join(bullet_buffer)}</ul>")
-                    bullet_buffer = []
-                if stripped:
-                    html_parts.append(f"<p>{stripped}</p>")
-        if bullet_buffer:
-            html_parts.append(f"<ul>{''.join(bullet_buffer)}</ul>")
-        return "\n".join(html_parts) if html_parts else f"<p>{text}</p>"
+                if li_buf:
+                    html += f"<ul>{''.join(li_buf)}</ul>"
+                    li_buf = []
+                if s:
+                    p_buf.append(s + " ")
+        if p_buf:
+            html += f"<p>{''.join(p_buf).strip()}</p>"
+        if li_buf:
+            html += f"<ul>{''.join(li_buf)}</ul>"
+        return html
 
-    # Rebuild with headers as bold labels
+    if not headers:
+        return _body_to_html(text) or f"<p>{text}</p>"
+
     html_parts = []
-    if parts[0].strip():
-        html_parts.append(f"<p>{parts[0].strip()}</p>")
-    for header, body in zip(headers, parts[1:]):
+    if pre:
+        html_parts.append(f"<p>{pre}</p>")
+    for header, body in zip(headers, bodies):
         header_clean = header.strip().rstrip(":")
         body_clean = body.strip()
         if not body_clean:
             continue
-        # Handle bullet points within body
-        body_clean = re.sub(r"\.\s*-\s+", ".\n- ", body_clean)
-        lines = body_clean.split("\n")
-        section_html = f"<h4 style='margin: 12px 0 4px; font-size: 0.95rem;'>{header_clean}</h4>"
-        p_buffer = []
-        bullet_buffer_inner: list[str] = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("- "):
-                if p_buffer:
-                    section_html += f"<p>{''.join(p_buffer)}</p>"
-                    p_buffer = []
-                bullet_buffer_inner.append(f"<li>{stripped[2:]}</li>")
-            else:
-                if bullet_buffer_inner:
-                    section_html += f"<ul>{''.join(bullet_buffer_inner)}</ul>"
-                    bullet_buffer_inner = []
-                if stripped:
-                    p_buffer.append(stripped + " ")
-        if p_buffer:
-            section_html += f"<p>{''.join(p_buffer).strip()}</p>"
-        if bullet_buffer_inner:
-            section_html += f"<ul>{''.join(bullet_buffer_inner)}</ul>"
-        html_parts.append(section_html)
+        section = f"<h4 style='margin: 12px 0 4px; font-size: 0.95rem;'>{header_clean}</h4>"
+        section += _body_to_html(body_clean)
+        html_parts.append(section)
 
     return "\n".join(html_parts)
 
