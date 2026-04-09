@@ -1,7 +1,7 @@
 [project]
 name = "kargo-product-recommendation-engine"
 version = "0.1.0"
-description = "Hybrid deterministic and AI-assisted product recommendation engine for Kargo."
+description = "Agentic AI product recommendation engine for Kargo."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

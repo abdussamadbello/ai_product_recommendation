@@ -25,7 +25,7 @@ class Settings:
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_base_url: str | None = os.getenv("OPENAI_BASE_URL")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-    openai_timeout_s: float = float(os.getenv("OPENAI_TIMEOUT_S", "20"))
+    openai_timeout_s: float = float(os.getenv("OPENAI_TIMEOUT_S", "30"))
     prompt_version: str = os.getenv("PROMPT_VERSION", "v1")
 
 
