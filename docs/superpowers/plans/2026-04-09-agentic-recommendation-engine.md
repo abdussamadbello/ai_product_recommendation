@@ -4,7 +4,7 @@
 
 **Goal:** Rebuild the Kargo product recommendation engine so an LLM agent drives product selection through tool calls, replacing the current deterministic pipeline.
 
-**Architecture:** LangGraph `create_react_agent` with 6 fine-grained tools (filter, sort, inspect, bundle, finalize) operates inside a guardrailed workflow. Pre-validation (Pydantic) ensures clean input; post-validation catches hallucinations and constraint violations, falling back to deterministic logic when needed.
+**Architecture:** LangGraph `create_react_agent` with 7 fine-grained tools (filter, sort, score, inspect, bundle, finalize) operates inside a guardrailed workflow. Pre-validation (Pydantic) ensures clean input; post-validation catches hallucinations and constraint violations, falling back to deterministic logic when needed.
 
 **Tech Stack:** LangGraph (create_react_agent), LangChain (ChatOpenAI), Pydantic v2, Pandas, Gradio, pytest
 
@@ -19,7 +19,7 @@
 | `src/kargo_reco/schemas.py` | REWRITE | Request, RecommendationItem, AgentStep, ResponseMeta, RecommendationResponse, TraceArtifact |
 | `src/kargo_reco/config.py` | MODIFY | Bump timeout default to 30s |
 | `src/kargo_reco/benchmark_loader.py` | UNCHANGED | BenchmarkRepository, CSV loading |
-| `src/kargo_reco/tools.py` | CREATE | 6 agent tool functions |
+| `src/kargo_reco/tools.py` | CREATE | 7 agent tool functions |
 | `src/kargo_reco/agent.py` | CREATE | create_react_agent setup + system prompt |
 | `src/kargo_reco/guardrails.py` | CREATE | Post-validation + deterministic fallback |
 | `src/kargo_reco/workflow.py` | REWRITE | 5-node orchestration |
@@ -372,7 +372,7 @@ git commit -m "chore: bump LLM timeout to 30s for agent tool-call loops"
 - Create: `src/kargo_reco/tools.py`
 - Test: `tests/test_tools.py`
 
-- [ ] **Step 1: Write failing tests for all 6 tools**
+- [ ] **Step 1: Write failing tests for all 7 tools**
 
 Create `tests/test_tools.py`:
 
@@ -388,6 +388,7 @@ from kargo_reco.tools import (
     filter_by_vertical,
     finalize_recommendation,
     get_product_details,
+    score_products,
     sort_by_kpi,
 )
 
@@ -515,6 +516,53 @@ def test_check_budget_remaining_unknown_product(sample_df: pd.DataFrame) -> None
     assert "error" in result
 
 
+# --- score_products ---
+
+def test_score_products_weighted_ranking() -> None:
+    products = [
+        {"creative_name": "A", "click_through_rate": 0.50, "in_view_rate": 0.60, "minimum_budget": 10000, "vertical": "Retail"},
+        {"creative_name": "B", "click_through_rate": 0.30, "in_view_rate": 0.90, "minimum_budget": 10000, "vertical": "Retail"},
+        {"creative_name": "C", "click_through_rate": 0.40, "in_view_rate": 0.80, "minimum_budget": 10000, "vertical": "Retail"},
+    ]
+    # Weight IVR heavily: B should win (0.3*0.3 + 0.9*0.7 = 0.72) vs A (0.5*0.3 + 0.6*0.7 = 0.57)
+    result = score_products(
+        products=products,
+        weights={"click_through_rate": 0.3, "in_view_rate": 0.7},
+        limit=3,
+    )
+    assert len(result) == 3
+    assert result[0]["creative_name"] == "B"
+    assert "score" in result[0]
+
+
+def test_score_products_single_kpi_weight() -> None:
+    products = [
+        {"creative_name": "A", "click_through_rate": 0.50, "in_view_rate": 0.60, "minimum_budget": 10000, "vertical": "Retail"},
+        {"creative_name": "B", "click_through_rate": 0.30, "in_view_rate": 0.90, "minimum_budget": 10000, "vertical": "Retail"},
+    ]
+    result = score_products(products=products, weights={"click_through_rate": 1.0}, limit=2)
+    assert result[0]["creative_name"] == "A"
+
+
+def test_score_products_empty_input() -> None:
+    result = score_products(products=[], weights={"click_through_rate": 1.0}, limit=5)
+    assert result == []
+
+
+def test_score_products_ignores_unknown_weight_keys() -> None:
+    products = [
+        {"creative_name": "A", "click_through_rate": 0.50, "in_view_rate": 0.60, "minimum_budget": 10000, "vertical": "Retail"},
+    ]
+    result = score_products(
+        products=products,
+        weights={"click_through_rate": 0.5, "in_view_rate": 0.5, "fake_metric": 0.5},
+        limit=5,
+    )
+    # fake_metric is ignored (treated as 0), still produces results
+    assert len(result) == 1
+    assert "score" in result[0]
+
+
 # --- finalize_recommendation ---
 
 def test_finalize_recommendation_structures_output(sample_df: pd.DataFrame) -> None:
@@ -622,6 +670,33 @@ def check_budget_remaining(
     }
 
 
+def score_products(
+    *,
+    products: list[dict[str, Any]],
+    weights: dict[str, float],
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Score and rank products using a weighted combination of KPIs.
+
+    The agent generates the weights to express its strategy. Only known
+    numeric columns (click_through_rate, in_view_rate) contribute to the
+    score; unknown keys are silently ignored.
+    """
+    known_metrics = {"click_through_rate", "in_view_rate"}
+    safe_weights = {k: v for k, v in weights.items() if k in known_metrics}
+
+    scored = []
+    for product in products:
+        score = sum(
+            product.get(metric, 0.0) * weight
+            for metric, weight in safe_weights.items()
+        )
+        scored.append({**product, "score": round(score, 6)})
+
+    scored.sort(key=lambda p: p["score"], reverse=True)
+    return scored[:limit]
+
+
 def finalize_recommendation(
     df: pd.DataFrame,
     *,
@@ -704,14 +779,15 @@ def sample_df() -> pd.DataFrame:
     )
 
 
-def test_build_tools_returns_six_tools(sample_df: pd.DataFrame) -> None:
+def test_build_tools_returns_seven_tools(sample_df: pd.DataFrame) -> None:
     tools = build_tools(sample_df, vertical="Retail")
-    assert len(tools) == 6
+    assert len(tools) == 7
     tool_names = {t.name for t in tools}
     assert tool_names == {
         "filter_by_vertical",
         "filter_by_budget",
         "sort_by_kpi",
+        "score_products",
         "get_product_details",
         "check_budget_remaining",
         "finalize_recommendation",
@@ -766,18 +842,20 @@ You MUST call finalize_recommendation as your last tool call to commit your sele
 Suggested strategy:
 1. Use filter_by_vertical to find products in the client's vertical.
 2. Use filter_by_budget to narrow to affordable products.
-3. Use sort_by_kpi to rank by the client's target KPI.
+3. Use score_products to create a weighted ranking formula that reflects the client's priorities. For example, if the KPI is click_through_rate, you might weight CTR at 0.8 and IVR at 0.2 — but you decide the weights based on the client's context.
 4. Use get_product_details to inspect the top candidate if needed.
 5. Use check_budget_remaining to see if a second product can be added.
 6. If budget allows, pick the next-best product that fits.
 7. Call finalize_recommendation with your selected product(s) and reasoning.
 
-When reasoning, explain trade-offs: why you picked this product over alternatives, how budget utilization factored in, and whether bundling adds value.
+You can also use sort_by_kpi for a simple single-KPI sort if a weighted formula isn't needed.
+
+When reasoning, explain trade-offs: why you picked this product over alternatives, what weights you chose and why, how budget utilization factored in, and whether bundling adds value.
 """
 
 
 def build_tools(df: pd.DataFrame, vertical: str) -> list[StructuredTool]:
-    """Create the 6 LangChain tools that the agent can call, bound to a DataFrame."""
+    """Create the 7 LangChain tools that the agent can call, bound to a DataFrame."""
 
     def _filter_by_vertical(vertical: str) -> list[dict[str, Any]]:
         """Find all products available in a given vertical."""
@@ -790,6 +868,10 @@ def build_tools(df: pd.DataFrame, vertical: str) -> list[StructuredTool]:
     def _sort_by_kpi(kpi: str, products: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
         """Sort products by a KPI (click_through_rate or in_view_rate) descending. Returns top N."""
         return tool_fns.sort_by_kpi(kpi=kpi, products=products, limit=limit)
+
+    def _score_products(products: list[dict[str, Any]], weights: dict[str, float], limit: int = 5) -> list[dict[str, Any]]:
+        """Score and rank products using your own weighted formula. Set weights for click_through_rate and/or in_view_rate to reflect the client's priorities. Example: {"click_through_rate": 0.8, "in_view_rate": 0.2}."""
+        return tool_fns.score_products(products=products, weights=weights, limit=limit)
 
     def _get_product_details(product_name: str, vertical: str) -> dict[str, Any] | None:
         """Get full details for a specific product by name and vertical."""
@@ -807,6 +889,7 @@ def build_tools(df: pd.DataFrame, vertical: str) -> list[StructuredTool]:
         StructuredTool.from_function(_filter_by_vertical, name="filter_by_vertical"),
         StructuredTool.from_function(_filter_by_budget, name="filter_by_budget"),
         StructuredTool.from_function(_sort_by_kpi, name="sort_by_kpi"),
+        StructuredTool.from_function(_score_products, name="score_products"),
         StructuredTool.from_function(_get_product_details, name="get_product_details"),
         StructuredTool.from_function(_check_budget_remaining, name="check_budget_remaining"),
         StructuredTool.from_function(_finalize_recommendation, name="finalize_recommendation"),

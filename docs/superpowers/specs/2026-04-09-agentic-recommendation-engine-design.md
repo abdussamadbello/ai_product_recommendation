@@ -48,7 +48,8 @@ LangGraph `create_react_agent` with a ReAct loop. The agent receives a system pr
 |------|-------|--------|---------|
 | `filter_by_vertical` | `vertical: str` | List of product dicts in that vertical | Discover available products |
 | `filter_by_budget` | `budget: float, products: list[dict]` | Products where minimum_budget <= budget | Narrow by affordability |
-| `sort_by_kpi` | `kpi: str, products: list[dict], limit: int` | Top N products ranked by KPI descending | Identify best performers |
+| `sort_by_kpi` | `kpi: str, products: list[dict], limit: int` | Top N products ranked by KPI descending | Identify best performers (single KPI) |
+| `score_products` | `products: list[dict], weights: dict[str, float], limit: int` | Products ranked by weighted score | Agent generates its own ranking formula |
 | `get_product_details` | `product_name: str, vertical: str` | Full product record | Inspect individual candidates |
 | `check_budget_remaining` | `budget: float, selected: list[str]` | `{ remaining: float, can_add_more: bool, affordable: list[dict] }` | Enable multi-product bundling |
 | `finalize_recommendation` | `products: list[str], reasoning: str` | Structured recommendation dict | Agent commits to its selection |
@@ -59,12 +60,12 @@ The system prompt instructs the agent to act as a media strategist assistant. It
 
 1. Filter products by the client's vertical
 2. Filter by budget
-3. Sort by the requested KPI to find the top candidate
+3. Use `score_products` to create a weighted ranking formula reflecting the client's priorities (e.g., weight CTR at 0.8 and IVR at 0.2), or use `sort_by_kpi` for a simple single-KPI sort
 4. Check if budget allows adding more products
 5. If yes, find the next best product that fits the remaining budget
-6. Finalize with selection and explain reasoning
+6. Finalize with selection and explain reasoning — including what weights were chosen and why
 
-The prompt suggests but does not force this order. The agent may call tools in any sequence.
+The prompt suggests but does not force this order. The agent may call tools in any sequence. The key differentiator is `score_products`: the agent generates its own ranking strategy rather than relying on a hardcoded sort.
 
 ### 3.4 Data Layer
 
